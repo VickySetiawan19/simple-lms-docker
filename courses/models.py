@@ -29,9 +29,10 @@ class Course(models.Model):
     description = models.TextField()
     instructor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='courses')
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
-    is_published = models.BooleanField(default=True)        # ← baru
-    created_at = models.DateTimeField(auto_now_add=True)    # ← baru
-    updated_at = models.DateTimeField(auto_now=True)        # ← baru
+    is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    enrollment_count = models.PositiveIntegerField(default=0)  # ← Fix #3: diupdate oleh Celery task
     objects = CourseManager()
 
 
@@ -47,9 +48,19 @@ class Lesson(models.Model):
 
 
 class Enrollment(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('dropped', 'Dropped'),
+    ]
     student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='enrollments')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='enrollments')
-    enrolled_at = models.DateTimeField(auto_now_add=True)   # ← baru
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(  # ← Fix #6: diperlukan oleh Celery task statistics
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='active',
+    )
 
     class Meta:
         unique_together = ('student', 'course')

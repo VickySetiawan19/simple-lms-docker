@@ -163,10 +163,13 @@ def update_enrollment_statistics():
             ).count()
 
             # Update field statistik di model Course
-            # (asumsi Course model punya field ini, atau kita skip jika tidak ada)
             course.enrollment_count = total_enrolled
-            course.save(update_fields=['enrollment_count'])
+            course.save(update_fields=['enrollment_count'])  # field ini sudah ada di model
             updated_count += 1
+
+            logger.debug(
+                f"  Course '{course.title}': enrolled={total_enrolled}, completed={total_completed}"
+            )
 
         logger.info(
             f"[TASK] update_enrollment_statistics: Berhasil update "
@@ -232,13 +235,13 @@ def export_course_report(self, course_id=None, requested_by_user_id=None):
         for enrollment in enrollments:
             writer.writerow([
                 enrollment.id,
-                enrollment.user.get_full_name() or enrollment.user.username,
-                enrollment.user.email,
+                enrollment.student.get_full_name() or enrollment.student.username,  # Fix #4: .student bukan .user
+                enrollment.student.email,                                             # Fix #4: .student bukan .user
                 enrollment.course.title,
-                enrollment.course.category.name if hasattr(enrollment.course, 'category') and enrollment.course.category else '-',
-                enrollment.enrolled_at.strftime('%Y-%m-%d') if hasattr(enrollment, 'enrolled_at') else '-',
-                enrollment.status if hasattr(enrollment, 'status') else '-',
-                getattr(enrollment, 'completion_percentage', 0),
+                enrollment.course.category.name if enrollment.course.category else '-',
+                enrollment.enrolled_at.strftime('%Y-%m-%d'),
+                enrollment.status,  # field status sudah ada di model
+                0,  # completion_percentage dihitung dari Progress, bisa di-extend nanti
             ])
             row_count += 1
 

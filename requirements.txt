@@ -10,6 +10,7 @@ django-redis==5.4.0
 # Celery & RabbitMQ
 celery==5.3.6
 kombu==5.3.4
+django-celery-beat==2.6.0
  
 # MongoDB
 pymongo==4.6.1
