@@ -30,6 +30,20 @@ def enroll_course(request, data: EnrollmentIn):
     except IntegrityError:
         raise HttpError(409, "Anda sudah terdaftar di course ini")
 
+    # ── Celery: Kirim email notifikasi secara async ──
+    try:
+        from courses.tasks import send_enrollment_email
+        user = request.auth
+        send_enrollment_email.delay(
+            user_id=user.id,
+            user_email=user.email,
+            user_name=user.get_full_name() or user.username,
+            course_id=course.id,
+            course_title=course.title,
+        )
+    except Exception:
+        pass  # Jangan gagalkan enrollment jika email gagal dikirim
+
     enrollment = Enrollment.objects.select_related(
         "course", "course__instructor", "course__instructor__profile"
     ).get(pk=enrollment.pk)
@@ -70,5 +84,33 @@ def mark_progress(request, enrollment_id: int, data: ProgressIn):
     else:
         progress.completed_at = None
     progress.save()
+
+    # ── Celery: Generate certificate jika semua lesson selesai ──
+    if data.is_completed:
+        course = enrollment.course
+        total_lessons = Lesson.objects.filter(course=course).count()
+        completed_lessons = Progress.objects.filter(
+            student=request.auth,
+            lesson__course=course,
+            is_completed=True,
+        ).count()
+
+        if total_lessons > 0 and completed_lessons >= total_lessons:
+            # Update enrollment status
+            enrollment.status = 'completed'
+            enrollment.save(update_fields=['status'])
+
+            # Trigger certificate generation
+            try:
+                from courses.tasks import generate_certificate
+                user = request.auth
+                generate_certificate.delay(
+                    user_id=user.id,
+                    user_name=user.get_full_name() or user.username,
+                    course_id=course.id,
+                    course_title=course.title,
+                )
+            except Exception:
+                pass  # Jangan gagalkan progress update jika certificate gagal
 
     return 201, progress

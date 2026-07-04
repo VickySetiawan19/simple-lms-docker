@@ -3,6 +3,8 @@ from courses.api.auth import jwt_auth
 from courses.api.auth_endpoints import router as auth_router
 from courses.api.course_endpoints import router as course_router
 from courses.api.enrollment_endpoints import router as enrollment_router
+from courses.api.lesson_endpoints import router as lesson_router
+from courses.api.task_endpoints import router as task_router
 
 api = NinjaAPI(
     title="Simple LMS API",
@@ -22,3 +24,5 @@ api = NinjaAPI(
 api.add_router("/auth", auth_router)
 api.add_router("/courses", course_router)
 api.add_router("/enrollments", enrollment_router)
+api.add_router("/lessons", lesson_router)
+api.add_router("/tasks", task_router)

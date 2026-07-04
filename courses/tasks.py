@@ -265,3 +265,133 @@ def export_course_report(self, course_id=None, requested_by_user_id=None):
             f"[TASK] export_course_report: Gagal generate report. Error: {exc}"
         )
         raise
+
+
+# =============================================
+# TASK 5: Cleanup Expired Data (Scheduled)
+# =============================================
+@shared_task
+def cleanup_expired_data():
+    """
+    Scheduled task: Bersihkan data yang sudah tidak diperlukan.
+    Berjalan setiap hari jam 2 pagi (dikonfigurasi di celery.py beat_schedule).
+
+    - Hapus session yang sudah expired
+    - Log hasil cleanup
+    """
+    try:
+        from django.contrib.sessions.models import Session
+        from django.utils import timezone as tz
+
+        # Hapus sessions expired
+        expired_count = Session.objects.filter(
+            expire_date__lt=tz.now()
+        ).count()
+
+        Session.objects.filter(expire_date__lt=tz.now()).delete()
+
+        logger.info(
+            f"[TASK] cleanup_expired_data: Dihapus {expired_count} expired sessions."
+        )
+
+        return {
+            "status": "success",
+            "expired_sessions_deleted": expired_count,
+            "run_at": datetime.now().isoformat(),
+        }
+
+    except Exception as exc:
+        logger.error(f"[TASK] cleanup_expired_data: Error - {exc}")
+        raise
+
+
+# =============================================
+# TASK 6: Sync Learning Analytics (Scheduled)
+# =============================================
+@shared_task
+def sync_learning_analytics():
+    """
+    Scheduled task: Sinkronisasi data progress dari PostgreSQL ke MongoDB LearningAnalytics.
+    Berjalan setiap 6 jam (dikonfigurasi di celery.py beat_schedule).
+
+    Menghitung ulang:
+    - Total lessons per course per student
+    - Completed lessons count
+    - Completion percentage
+    """
+    try:
+        from courses.models import Course, Enrollment, Lesson, Progress
+
+        synced_count = 0
+        enrollments = Enrollment.objects.select_related('student', 'course').filter(
+            status__in=['active', 'completed']
+        )
+
+        for enrollment in enrollments:
+            course = enrollment.course
+            student = enrollment.student
+
+            total_lessons = Lesson.objects.filter(course=course).count()
+            completed_lessons = Progress.objects.filter(
+                student=student,
+                lesson__course=course,
+                is_completed=True,
+            ).count()
+
+            completion_pct = 0.0
+            if total_lessons > 0:
+                completion_pct = (completed_lessons / total_lessons) * 100
+
+            # Update atau insert ke MongoDB
+            try:
+                from analytics.mongo_models import LearningAnalytics as LA
+
+                analytics = LA.objects(
+                    user_id=student.id,
+                    course_id=course.id,
+                ).first()
+
+                if analytics:
+                    analytics.total_lessons = total_lessons
+                    analytics.completed_lessons = completed_lessons
+                    analytics.completion_percentage = completion_pct
+                    analytics.course_title = course.title
+                    analytics.last_activity = datetime.now()
+                    if completion_pct >= 100 and not analytics.is_completed:
+                        analytics.is_completed = True
+                        analytics.completed_at = datetime.now()
+                    analytics.updated_at = datetime.now()
+                    analytics.save()
+                else:
+                    LA(
+                        user_id=student.id,
+                        course_id=course.id,
+                        course_title=course.title,
+                        total_lessons=total_lessons,
+                        completed_lessons=completed_lessons,
+                        completion_percentage=completion_pct,
+                        is_completed=completion_pct >= 100,
+                        first_enrolled=enrollment.enrolled_at,
+                        last_activity=datetime.now(),
+                    ).save()
+
+                synced_count += 1
+            except Exception as mongo_exc:
+                logger.warning(
+                    f"[TASK] sync_learning_analytics: Gagal sync "
+                    f"user={student.id} course={course.id}: {mongo_exc}"
+                )
+
+        logger.info(
+            f"[TASK] sync_learning_analytics: Berhasil sync "
+            f"{synced_count} records ke MongoDB."
+        )
+        return {
+            "status": "success",
+            "synced_records": synced_count,
+            "run_at": datetime.now().isoformat(),
+        }
+
+    except Exception as exc:
+        logger.error(f"[TASK] sync_learning_analytics: Error - {exc}")
+        raise

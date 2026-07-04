@@ -79,6 +79,20 @@ class LessonTitleOut(Schema):
     order: int
 
 
+class LessonIn(Schema):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    order: Optional[int] = None
+
+
+class LessonOut(Schema):
+    id: int
+    title: str
+    content: str
+    order: int
+    created_at: datetime
+
+
 class CourseOut(Schema):
     id: int
     title: str
@@ -131,6 +145,20 @@ class ProgressOut(Schema):
     @staticmethod
     def resolve_lesson_title(obj):
         return obj.lesson.title
+
+
+# ─── Task Schemas ────────────────────────────────────────
+
+class TaskTriggerOut(Schema):
+    task_id: str
+    status: str
+    message: str
+
+
+class TaskStatusOut(Schema):
+    task_id: str
+    status: str
+    result: Optional[dict] = None
 
 
 # ─── Generic ─────────────────────────────────────────────
