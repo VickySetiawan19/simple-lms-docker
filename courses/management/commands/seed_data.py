@@ -79,14 +79,16 @@ class Command(BaseCommand):
             if created:
                 user.set_password(u_data['password'])
                 user.save()
-                UserProfile.objects.get_or_create(
-                    user=user, defaults={'role': u_data['role']}
-                )
                 self.stdout.write(self.style.SUCCESS(
                     f"  ✅ User '{user.username}' (role: {u_data['role']}) dibuat"
                 ))
             else:
                 self.stdout.write(f"  ⏭️  User '{user.username}' sudah ada, skip")
+
+            # Selalu pastikan UserProfile ada (fix: profile juga dibuat untuk user yang sudah ada)
+            UserProfile.objects.get_or_create(
+                user=user, defaults={'role': u_data['role']}
+            )
             created_users[u_data['username']] = user
 
         # ─── 2. CATEGORIES ─────────────────────────────────
